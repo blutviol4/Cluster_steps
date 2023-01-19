@@ -1,0 +1,382 @@
+#a. tome la base de datos creada en la Fase_1  "SES_ST_EU_DAT.csv" y exclui los NAs
+#b. correr el codigo para identificar el mejor numero de clusters (en este caso debido a la gran cantidad de datos solo voy a correr siluette index)
+#c. correr el cluster 
+
+
+#CLUSTER CZECH REPUBLIC (20 % OD THE COMPLETE OBSERVATIONS) 
+
+print(Sys.time())
+rm(list = ls()) # clean memory
+
+start_time <- Sys.time()
+
+
+library(tidyverse)
+library(sf)  
+library(raster)  
+library(dplyr) 
+library(ggplot2) 
+library(readr) 
+library(naniar)
+library(visdat)
+library(readxl)
+library(ggmap)
+library(ggforce)
+library(patchwork)
+library(concaveman)
+library(emmeans)
+library(multcomp)
+library(multcompView)
+library(ggplot2)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(NbClust)
+library(ggpubr)
+library(sp)
+library(rgdal)
+library(stars)
+library(gstat)
+library(base)
+library(knitr)
+library(rmarkdown)
+library(dismo)
+
+
+
+###############################################################VV
+
+#biomass<-file.path(inputDir,"Crop_bio_cz.tif")
+#Biomass1 <- stars::read_stars(biomass)
+#plot(Biomass1)
+
+#SOC_LOSS<-file.path(inputDir,"SOC_loss_cz.tif")
+#SOC_LOSS1 <- stars::read_stars(SOC_LOSS)
+#plot(SOC_LOSS1)
+
+#Erosion<-file.path(inputDir,"water_ero_cz.tif")
+#erosion1 <- stars::read_stars(Erosion)
+#plot(erosion1)
+
+#stack("biomass","SOC_LOSS", "Erosion",layers=NULL)
+
+
+###creating raster stack and extractin matrix with complete observations 
+
+#SES_ST<- stack('UE_RASTER_stack.tif')
+#plot(SES_ST)
+# loading the layerstack  
+# here we use a subset of the Landsat dataset from "Remote Sensing and GIS for Ecologists" 
+
+
+## returns the values of the raster dataset and write them in a matrix. 
+#v <- getValues(SES_ST)
+#coo <- coordinates(SES_ST)
+#i <- which(!is.na(v))
+#v <- na.omit(v)
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # v
+##### extraer coordenada y datos y luego unir
+
+#coo <- coordinates(valle.reclass)
+## clase ##
+class(coo)
+
+## convrtir en dataframe coordenadas 
+#coo <- as.data.frame(coo)
+tibble(coo)
+
+### extraer clases #####
+#x <- extract(valle.reclass,coo)
+
+## convierto en dataframe datos extraidos ## 
+#x <- data.frame(temperatura = x)
+#tibble(x)
+
+### unir datos con coordenadas ##
+#xx <- cbind(coo,x) 
+## omito coordenadas vacias ##3
+#x1 <- na.omit(xx) 
+#tibble(x1)
+## extrer datos reales del raster ###
+##
+
+#x1
+
+#te <- extract(crop.valle,x1[,1:2])
+
+## convertir data frame valores reales ## 
+#te <- data.frame(temp = te)
+#tibble(te)
+
+## unir base de datos de coordenadas con datos reales ##
+v <- read_csv("SES_ST_EU_DAT.csv")
+i <- which(!is.na(v))
+v <- na.omit(v)# v complete observations
+
+v <- v  %>%  rename(v1 = band1...3,
+                    v2 = band1...4,
+                    v3 = band1...5)
+
+km_w <- v
+
+###############################################################VV
+#Indices de seleccion y optimizacion del numero de cluster
+
+#gstat <- fviz_nbclust(km_w, kmeans, method = "gap_stat", nboot = 1000)
+#wss <- fviz_nbclust(km_w, kmeans, method = "wss", nboot = 1000)
+sil <- fviz_nbclust(km_w, kmeans, method = "silhouette", nboot = 1000)
+
+res.nbclust <- NbClust(km_w, distance = "euclidean",
+                       min.nc = 2, max.nc = 9, 
+                       method = "complete", index ="all")
+
+######################################################################
+# con el numero de cluster identificado y seleccionado 
+
+km.res_4 <- kmeans(scale(km_w), 4, nstart = 100)
+km.res_6 <- kmeans(scale(km_w), 6, nstart = 100)
+
+# 3. Visualize
+
+library(randomcoloR)
+n <- 4
+palette <- distinctColorPalette(n)
+clusw_4 <- fviz_cluster(km.res_4, data = km_w,
+                        palette = palette,
+                        ellipse.type = "euclid", # Concentration ellipse
+                        star.plot = TRUE, # Add segments from centroids to items
+                        repel = TRUE, # Avoid label overplotting (slow)
+                        ggtheme = theme_minimal())
+
+
+
+
+x <- data.frame(cluster_4 = km.res_4$cluster,
+                cluster_6 = km.res_6$cluster)
+tibble(x)
+
+
+## union de datos reales con cluster ##
+
+y <- CZ_Complet_obs
+names(y)
+y <- y[,3:5]
+x <- cbind(x,y )
+tibble(x)
+x <-  x %>%  rename(v1 = SES_ST.layer.1,
+                    v2 = SES_ST.layer.2,
+                    v3 = SES_ST.layer.3)
+
+tibble(x)
+
+write.csv(x, "C:/Users/Blutv/OneDrive/Documents/BUNDLES/Bundles/nb_clust/cz_cluster_coord.csv", row.names=FALSE)
+
+## valores promedio por cluster ##
+
+x$cluster_4 <- as.factor(x$cluster_4)
+x$cluster_6 <- as.factor(x$cluster_6)
+glimpse(x)
+
+b <- x %>% group_by(cluster_4) %>% summarise(n = n(),
+                                             v1 = mean(v1),
+                                             v1sd = sd(x$v1),
+                                             v2 = mean(v2),
+                                             v2sd = sd(x$v2),
+                                             v3 = mean(v3),
+                                             v3sd = sd(x$v3))
+
+
+
+c <- x %>% group_by(cluster_6) %>% summarise(n = n(),
+                                             v1 = mean(v1),
+                                             v1sd = sd(x$v1),
+                                             v2 = mean(v2),
+                                             v2sd = sd(x$v2),
+                                             v3 = mean(v3),
+                                             v3sd = sd(x$v3))
+
+
+esquisse::esquisser(b)
+
+esquisse::esquisser(c)
+
+esquisse?
+  
+  library(ggplot2)
+##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### 
+##### CLUSTER_4
+
+ggplot(b) +
+  aes(x = cluster_4, fill = cluster_4, weight = v2) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "SOC loss") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_4, fill = cluster_4, y=v2) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "SOC loss") +
+  theme_gray()
+
+
+
+
+library(ggplot2)
+
+ggplot(b) +
+  aes(x = cluster_4, fill = cluster_4, weight = v1) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Primary biomass") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_4, fill = cluster_4, y=v1) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Primary biomass") +
+  theme_gray()
+
+
+ggplot(b) +
+  aes(x = cluster_4, fill = cluster_4, weight= v3) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Soil erosion") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_4, fill = cluster_4, y=v3) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Soil erosion") +
+  theme_gray()
+
+
+library(ggplot2)
+
+ggplot(x) +
+  aes(x = cluster_4, fill = cluster_4, weight = v1) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Clusters", y = "Numero de pixels") +
+  coord_flip() +
+  theme_gray()
+
+end_time <- Sys.time()
+
+
+
+##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### 
+##### CLUSTER_6
+
+ggplot(c) +
+  aes(x = cluster_6, fill = cluster_6, weight = v1) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Primary biomass") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_6, fill = cluster_6, y=v1) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Primary biomass") +
+  theme_gray()
+
+
+ggplot(c) +
+  aes(x = cluster_6, fill = cluster_6, weight = v2) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "SOC loss") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_6, fill = cluster_6, y=v2) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "SOC loss") +
+  theme_gray()
+
+
+ggplot(c) +
+  aes(x = cluster_6, fill = cluster_6, weight = v3) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Soil erosion") +
+  theme_gray()
+
+##### box plot
+ggplot(x) +
+  aes(x = cluster_6, fill = cluster_6, y=v3) +
+  geom_boxplot() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Soil erosion") +
+  theme_gray()
+
+
+ggplot(c) +
+  aes(x = cluster_6, fill = cluster_6, weight = n) +
+  geom_bar() +
+  scale_fill_hue(direction = 1) +
+  labs(x = "Cluster", y = "Pixels count") +
+  theme_gray()
+
+
+ggplot(c) +
+  aes(x = cluster_6, y = n) +
+  geom_col(fill = "#112446") +
+  coord_flip() +
+  theme_minimal()
+
+
+
+################################# mapear
+
+
+library(rgdal) ### analisis espacial ##
+library(raster)
+library(sf)
+library(maptools)
+library(rgeos)
+library(readxl) ## leer dataframe de excel ## 
+library(readr)  ## leer archivos .csv ## 
+library(tidyverse) ## Manipulacion de datos ##  
+library(rasterVis) ## Visualizacion archivos raster ## 
+library(gridExtra) 
+
+
+## Funcion para crear spatial points de archivo en formato de texto
+
+clust4_num <-
+  create_points <- function(p_anisohn){ ## .csv 
+    
+    WGScoor<-  p_anisohn ## asignar el objeto  
+    coordinates(WGScoor)=~x+y ##  cuales son las coorde
+    proj4string(WGScoor)<- CRS("+proj=longlat +datum=WGS84") ## referencia de coordenadas ##
+    points_shp <-spTransform(WGScoor,CRS("+proj=longlat"))
+    
+    return(points_shp)
+  } ### puntos en formato espacial 
+##################################################
+
+#iomass_cz <- raster("C:/Users/Blutv/OneDrive/Documents/BUNDLES/Biomass/esdac_biomass_production_geotiff/sqi_fig5_crop1.tif")
+#crs(biomass_cz)
+
+# Determinar el sistema de coordenadas para la proyeccion
+utm17nCRS <- CRS("+init=epsg:4326")
+
+x$cluster_4 <-as.numeric(x$cluster_4)
+
+# Convertir los puntos en el formato de puntos espaciales para su utilizaci?n en geoestad?stica
+datos_SP <- SpatialPointsDataFrame(x[,3:4], x, proj4string = CRS("+proj=longlat"))
+datos_SP <- spTransform(datos_SP, utm17nCRS) ## Sistema de coordenadas deseado

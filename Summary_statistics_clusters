@@ -1,0 +1,18 @@
+#Calculate the min, max and mean value that is the rank of each value by cluster
+
+library(dplyr)
+
+soc %>% count(cluster_6)## numero de pixeles 
+
+cz<- read.csv("Cluster_eu_Test_fin.csv")
+
+b<-soc%>%
+    group_by(cluster_6)%>%
+    summarise_if(is.numeric, min)
+b<-soc%>%
+  group_by(cluster_6)%>%
+  summarise_if(is.numeric, max)
+
+b<-soc%>%
+  group_by(cluster_6)%>%
+  summarise_if(is.numeric, mean)
